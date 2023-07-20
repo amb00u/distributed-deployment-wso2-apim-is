@@ -1,0 +1,32 @@
+# Remove wso2carbon.jks if exists
+rm -f {{ security_home }}/wso2carbon.jks
+
+# Delete existing wso2carbon.pfx
+rm -f {{ cert_files }}/repository/resources/security/wso2carbon.pfx
+
+# Create a keystore from certificate and private key
+openssl pkcs12 -export -in {{ cert_files }}/host.pem -inkey {{ cert_files }}/host.key -name wso2carbon -out {{ cert_files }}/wso2carbon.pfx  -passout pass:wso2carbon
+
+# Convert en JKS
+keytool -importkeystore -srckeystore {{ cert_files }}/wso2carbon.pfx -srcstoretype pkcs12 -srcstorepass wso2carbon -destkeystore {{ security_home }}/wso2carbon.jks -deststoretype JKS -storepass wso2carbon
+
+# Export the primary certificate
+keytool -exportcert -keystore {{ security_home }}/wso2carbon.jks -alias wso2carbon -file {{ security_home }}/certificate.pem -storepass wso2carbon
+
+# Delete wso2carbon alias if exists
+keytool -delete -alias wso2carbon -keystore {{ security_home }}/client-truststore.jks -storepass wso2carbon
+
+# Import certificate in the trust-store
+keytool -v -noprompt -importcert -keystore {{ security_home }}/client-truststore.jks -alias wso2carbon -file {{ security_home }}/certificate.pem -storepass wso2carbon
+
+# Import IS certificate in the trust-store
+keytool -v -noprompt -importcert -keystore {{ security_home }}/client-truststore.jks -alias is_cert -file {{ security_home }}/is_cert.pem -storepass wso2carbon
+
+# Import Traffic Manager certificate in the trust-store
+keytool -v -noprompt -importcert -keystore {{ security_home }}/client-truststore.jks -alias tm_cert -file {{ security_home }}/tm_cert.pem -storepass wso2carbon
+
+# Import Gateway certificate in the trust-store ## Always keep gateway_certificate_alias as alias name
+keytool -v -noprompt -importcert -keystore {{ security_home }}/client-truststore.jks -alias gateway_certificate_alias -file {{ security_home }}/gw_cert.pem -storepass wso2carbon
+
+# Import Certificate Autority
+keytool -v -noprompt -importcert -keystore {{ security_home }}/client-truststore.jks -alias ca_cert -file {{ cert_files }}/ca.pem -storepass wso2carbon

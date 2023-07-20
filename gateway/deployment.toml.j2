@@ -1,0 +1,249 @@
+[server]
+hostname = "{{ primay_cname }}"
+node_ip = "{{ node_ip }}"
+base_path = "https://$ref{server.hostname}:${carbon.management.port}"
+offset="{{ ports_offset }}"
+server_role = "gateway-worker"
+
+[transport.https.properties]
+proxyPort = 443
+
+[user_store]
+type = "database_unique_id"
+
+[super_admin]
+username = "{% if secure_vault_enabled|bool %}$secret{admin_username}{% else %}{{ admin_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{admin_password}{% else %}{{ admin_password }}{% endif %}"
+create_admin_account = true
+
+[database.shared_db]
+type = "{{ wso2shared_db_type }}"
+url = "{{ wso2shared_db_url }}"
+username = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_username}{% else %}{{ wso2shared_db_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_password}{% else %}{{ wso2shared_db_password }}{% endif %}"
+driver = "{{ jdbc_driver }}"
+validationQuery = "SELECT 1"
+pool_options.maxActive = "300"
+pool_options.maxWait = "60000"
+pool_options.minIdle = "5"
+pool_options.testOnBorrow = true
+pool_options.validationInterval="30000"
+pool_options.defaultAutoCommit=false
+{% if slow_query_report|bool %}pool_options.jdbcInterceptors = "org.apache.tomcat.jdbc.pool.interceptor.SlowQueryReport(threshold=30)"{% endif %}
+pool_options.commitOnReturn=true
+pool_options.rollbackOnReturn=false
+pool_options.logAbandoned=true
+pool_options.removeAbandoned=true
+pool_options.removeAbandonedTimeout="120000"
+
+[[datasource]]
+id = "WSO2AM_STATS_DB"
+driver = "{{ jdbc_driver }}"
+url = "{{ wso2am_db_url }}"
+username = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_username}{% else %}{{ wso2shared_db_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_password}{% else %}{{ wso2shared_db_password }}{% endif %}"
+pool_options.maxActive = "250"
+pool_options.maxWait = "60000"
+pool_options.minIdle = "5"
+pool_options.testOnBorrow = true
+pool_options.validationQuery="SELECT 1; COMMIT"
+pool_options.validationInterval="30000"
+pool_options.defaultAutoCommit=false
+{% if slow_query_report|bool %}pool_options.jdbcInterceptors = "org.apache.tomcat.jdbc.pool.interceptor.SlowQueryReport(threshold=30)"{% endif %}
+pool_options.commitOnReturn=true
+pool_options.rollbackOnReturn=false
+pool_options.logAbandoned=true
+pool_options.removeAbandoned=true
+pool_options.removeAbandonedTimeout="120000"
+
+# Connecting the Gateway to the Key Manager node #
+
+# Key Manager configuration
+[apim.key_manager]
+service_url = "{{ is_url }}:443/services/"
+username = "$ref{super_admin.username}"
+password = "$ref{super_admin.password}"
+type = "WSO2-IS"
+
+# Connecting the Gateway to the Control Plane node #
+
+# Event Listener configurations
+[[event_listener]]
+id = "token_revocation"
+type = "org.wso2.carbon.identity.core.handler.AbstractIdentityHandler"
+name = "org.wso2.is.notification.ApimOauthEventInterceptor"
+order = 1
+
+[event_listener.properties]
+notification_endpoint = "https://{{ control_plane_host }}:443/internal/data/v1/notify"
+username = "${admin.username}"
+password = "${admin.password}"
+'header.X-WSO2-KEY-MANAGER' = "default"
+
+# Event Hub configurations
+[apim.event_hub]
+enable = true
+username = "$ref{super_admin.username}"
+password = "$ref{super_admin.password}"
+service_url = "https://{{ control_plane_host }}:443/services/"
+event_listening_endpoints = ["tcp://{{ control_plane_node }}:{{ 5672 + cp_offset }}"]
+
+[[apim.event_hub.publish.url_group]]
+urls = ["tcp://{{ control_plane_node }}:{{ 9611 + cp_offset }}"]
+auth_urls = ["ssl://{{ control_plane_node }}:{{ 9711 + cp_offset }}"]
+
+# Connecting the Gateway to the Traffic Manager node #
+
+[apim.throttling]
+username = "$ref{super_admin.username}"
+password = "$ref{super_admin.password}"
+service_url = "{{ traffic_manager_node }}:9444/services/"
+throttle_decision_endpoints = ["tcp://{{ traffic_manager_node}}:{{ 5672 + tm_offset }}"]
+enable_unlimited_tier = true
+enable_header_based_throttling = false
+enable_jwt_claim_based_throttling = false
+enable_query_param_based_throttling = false
+
+[[apim.throttling.url_group]]
+traffic_manager_urls = ["tcp://{{ traffic_manager_node }}:{{ 9611 + tm_offset }}"]
+traffic_manager_auth_urls = ["ssl://{{ traffic_manager_node }}:{{ 9711 + tm_offset }}"]
+
+[keystore.tls]
+file_name =  "{{ tls_key_store_name }}"
+type =  "JKS"
+password =  "{% if secure_vault_enabled|bool %}$secret{tls_key_store_password}{% else %}{{ tls_key_store_password }}{% endif %}"
+alias =  "{{ tls_key_store_key_alias }}"
+key_password =  "{% if secure_vault_enabled|bool %}$secret{tls_key_store_key_password}{% else %}{{ tls_key_store_key_password }}{% endif %}"
+
+[truststore]
+file_name = "{{ trust_store_name }}"
+type = "JKS"
+password = "{% if secure_vault_enabled|bool %}$secret{trust_store_password}{% else %}{{ trust_store_password }}{% endif %}"
+
+{% if jwt_enable is defined %}
+ # JWT Generation
+[apim.jwt]
+enable = "{{ jwt_enable | bool | lower }}"
+encoding = "{{ jwt_encoding }}"
+generator_impl = "{{ jwt_generator_impl }}"
+claim_dialect = "{{ jwt_claim_dialect }}"
+header = "{{ jwt_header }}"
+signing_algorithm = "{{ jwt_signing_algorithm }}"
+enable_user_claims = "{{ jwt_enable_user_claims | bool | lower }}"
+claims_extractor_impl = "{{ jwt_claims_extractor_impl }}"
+{% endif %}
+
+[apim.sync_runtime_artifacts.gateway]
+gateway_labels = [{% for label in sync_runtime_gateway_labels %}"{{ label }}"{%- if not loop.last -%},{% endif %}{% endfor %}]
+
+[apim.analytics]
+enable = {{ analytics_apim_enabled | bool | lower }}
+auth_token = "{{ analytics_apim_auth_token }}"
+
+# Caches
+[apim.cache.gateway_token]
+enable = true
+expiry_time = 15
+
+[apim.cache.resource]
+enable = true
+
+[apim.cache.jwt_claim]
+enable = true
+expiry_time = 900
+
+[apim.oauth_config]
+enable_outbound_auth_header = true
+auth_header = "Authorization"
+
+[apim.cors]
+allow_origins = "*"
+allow_methods = ["GET","PUT","POST","DELETE","PATCH","OPTIONS", "HEAD"]
+allow_headers = [
+"authorization",
+"Access-Control-Allow-Origin",
+"Content-Type",
+"traceparent",
+"Accept",
+"Accept-encoding",
+"Access-Control-Allow-Credentials",
+"Access-Control-Allow-Headers",
+"Access-Control-Allow-Methods",
+"Access-Control-Allow-Origin",
+"Access-Control-Request-Headers",
+"Access-Control-Request-Method",
+"Authorization",
+"Content-Length",
+"Content-Security-Policy",
+"Content-Type",
+"Origin",
+"Referrer-Policy",
+"Strict-Transport-Security",
+"X-Requested-With",
+"X-Forwarded-Proto",
+"X-Forwarded-Prefix",
+"X-Forwarded-Host",
+"Host",
+"X-Forwarded-*",
+"X-Xss-Protection",
+"X-Frame-Options",
+"X-Content-Type-Options",
+"X-Download-Options",
+"X-Permitted-Cross-Domain-Policies","X-App",
+"X-Application",
+"X-ApplicationName",
+"X-TenantID",
+"X-Tenant-Id",
+"X-Entity-Id",
+"X-Request-Id",
+"X-RequestId",
+"X-EntityID",
+"X-CorrelationID",
+"X-Correlation-Id",
+"X-Transaction-Token",
+"X-Transaction-Hash",
+"X-UNB-Transaction-Token",
+"X-OperationId",
+"X-UNB-Transition-Hash",
+"X-UNB-User-SecretKey",
+"SSL-CLIENT-CERT",
+"Internal-Key"
+]
+allow_credentials = false
+
+{% if gw_https_proxy_port is defined %}
+[transport.https.properties]
+proxyPort = {{ gw_https_proxy_port }}
+{% endif %}
+
+{% if secure_vault_enabled|bool %}
+[secrets]
+admin_password = "[{{ admin_password }}]"
+wso2am_db_username = "[{{ wso2am_db_username }}]"
+wso2am_db_password = "[{{ wso2am_db_password }}]"
+wso2shared_db_username = "[{{ wso2shared_db_username }}]"
+wso2shared_db_password = "[{{ wso2shared_db_password }}]"
+primary_key_store_password = "[{{ primary_key_store_password }}]"
+primary_key_store_key_password = "[{{ primary_key_store_key_password }}]"
+trust_store_password = "[{{ trust_store_password }}]"
+internal_key_store_key_password = "[{{ internal_key_store_key_password }}]"
+internal_key_store_password = "[{{ internal_key_store_password }}]"
+tls_key_store_key_password = "[{{ tls_key_store_key_password }}]"
+tls_key_store_password = "[{{ tls_key_store_password }}]"
+{% endif %}
+
+[carbon_health_check]
+enable = true
+
+[carbon_health_check.health_checker.data_source_health_checker]
+enable = true
+pool_usage_limit_percentage = "80"
+order = "97"
+
+[carbon_health_check.health_checker.data_source_health_checker.properties]
+'monitored.datasources' = "jdbc/WSO2CarbonDB,jdbc/WSO2AM_DB,jdbc/SHARED_DB,jdbc/WSO2MetricsDB,jdbc/WSO2AM_STATS_DB"
+
+[[resource.access_control]]
+context="(.*)/((\\.+)|(.*;+.*)|%2e)/(.*)"
+secure=true
+http_method="all"

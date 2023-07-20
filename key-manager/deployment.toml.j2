@@ -1,0 +1,180 @@
+[server]
+hostname = "{{ primay_cname }}"
+node_ip = "{{ node_ip }}"
+base_path = "https://$ref{server.hostname}:${carbon.management.port}"
+offset= "{{ ports_offset }}"
+server_role = "api-key-manager"
+
+[transport.https.properties]
+proxyPort = 443
+
+[super_admin]
+username = "{% if secure_vault_enabled|bool %}$secret{admin_username}{% else %}{{ admin_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{admin_password}{% else %}{{ admin_password }}{% endif %}"
+create_admin_account = true
+
+[user_store]
+type = "database_unique_id"
+
+[database.apim_db]
+type = "{{ wso2am_db_type }}"
+url = "{{ wso2am_db_url }}"
+username = "{% if secure_vault_enabled|bool %}$secret{wso2am_db_username}{% else %}{{ wso2am_db_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{wso2am_db_password}{% else %}{{ wso2am_db_password }}{% endif %}"
+pool_options.maxActive = "300"
+pool_options.maxWait = "60000"
+pool_options.minIdle = "5"
+pool_options.testOnBorrow = true
+pool_options.validationInterval="30000"
+pool_options.defaultAutoCommit=false
+{% if slow_query_report|bool %}pool_options.jdbcInterceptors = "org.apache.tomcat.jdbc.pool.interceptor.SlowQueryReport(threshold=30)"{% endif %}
+pool_options.commitOnReturn=true
+pool_options.rollbackOnReturn=false
+pool_options.logAbandoned=true
+pool_options.removeAbandoned=true
+pool_options.removeAbandonedTimeout="120000"
+
+[database.shared_db]
+type = "{{ wso2shared_db_type }}"
+url = "{{ wso2shared_db_url }}"
+username = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_username}{% else %}{{ wso2shared_db_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_password}{% else %}{{ wso2shared_db_password }}{% endif %}"
+pool_options.maxActive = "300"
+pool_options.maxWait = "60000"
+pool_options.minIdle = "5"
+pool_options.testOnBorrow = true
+pool_options.validationInterval="30000"
+pool_options.defaultAutoCommit=false
+{% if slow_query_report|bool %}pool_options.jdbcInterceptors = "org.apache.tomcat.jdbc.pool.interceptor.SlowQueryReport(threshold=30)"{% endif %}
+pool_options.commitOnReturn=true
+pool_options.rollbackOnReturn=false
+pool_options.logAbandoned=true
+pool_options.removeAbandoned=true
+pool_options.removeAbandonedTimeout="120000"
+
+[[datasource]]
+id = "WSO2AM_STATS_DB"
+driver = "{{ jdbc_driver }}"
+url = "{{ wso2am_db_url }}"
+username = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_username}{% else %}{{ wso2shared_db_username }}{% endif %}"
+password = "{% if secure_vault_enabled|bool %}$secret{wso2shared_db_password}{% else %}{{ wso2shared_db_password }}{% endif %}"
+pool_options.maxActive = "250"
+pool_options.maxWait = "60000"
+pool_options.minIdle = "5"
+pool_options.testOnBorrow = true
+pool_options.validationQuery="SELECT 1; COMMIT"
+pool_options.validationInterval="30000"
+pool_options.defaultAutoCommit=false
+{% if slow_query_report|bool %}pool_options.jdbcInterceptors = "org.apache.tomcat.jdbc.pool.interceptor.SlowQueryReport(threshold=30)"{% endif %}
+pool_options.commitOnReturn=true
+pool_options.rollbackOnReturn=false
+pool_options.logAbandoned=true
+pool_options.removeAbandoned=true
+pool_options.removeAbandonedTimeout="120000"
+
+# Connecting the Key Manager to the Control Plane node #
+# Event Listener configurations
+[[event_listener]]
+id = "token_revocation"
+type = "org.wso2.carbon.identity.core.handler.AbstractIdentityHandler"
+name = "org.wso2.is.notification.ApimOauthEventInterceptor"
+order = 1
+
+[event_listener.properties]
+notification_endpoint = "https://{{ control_plane_host }}:443/internal/data/v1/notify"
+username = "${admin.username}"
+password = "${admin.password}"
+'header.X-WSO2-KEY-MANAGER' = "default"
+
+# Event Hub configurations
+[apim.event_hub]
+enable = true
+username= "$ref{super_admin.username}"
+password= "$ref{super_admin.password}"
+service_url = "https://{{ control_plane_host }}:443/services/"
+event_listening_endpoints = ["tcp://{{ control_plane_node }}:{{5672 + cp_offset }}"]
+
+[[apim.event_hub.publish.url_group]]
+urls = ["tcp://{{ control_plane_node }}:{{ 9611 + cp_offset }}"]
+auth-urls = ["ssl://{{ control_plane_node }}:{{ 9711 + cp_offset }}"]
+
+[keystore.tls]
+file_name =  "{{ tls_key_store_name }}"
+type =  "JKS"
+password =  "{% if secure_vault_enabled|bool %}$secret{tls_key_store_password}{% else %}{{ tls_key_store_password }}{% endif %}"
+alias =  "{{ tls_key_store_key_alias }}"
+key_password =  "{% if secure_vault_enabled|bool %}$secret{tls_key_store_key_password}{% else %}{{ tls_key_store_key_password }}{% endif %}"
+
+[keystore.primary]
+file_name =  "{{ primary_key_store_name }}"
+type =  "JKS"
+password =  "{% if secure_vault_enabled|bool %}$secret{primary_key_store_password}{% else %}{{ primary_key_store_password }}{% endif %}"
+alias =  "{{ primary_key_store_key_alias }}"
+key_password =  "{% if secure_vault_enabled|bool %}$secret{primary_key_store_key_password}{% else %}{{ primary_key_store_key_password }}{% endif %}"
+
+[keystore.internal]
+file_name =  "{{ internal_key_store_name }}"
+type =  "JKS"
+password =  "{% if secure_vault_enabled|bool %}$secret{internal_key_store_password}{% else %}{{ internal_key_store_password }}{% endif %}"
+alias =  "{{ internal_key_store_key_alias }}"
+key_password =  "{% if secure_vault_enabled|bool %}$secret{internal_key_store_key_password}{% else %}{{ internal_key_store_key_password }}{% endif %}"
+
+[truststore]
+file_name = "{{ trust_store_name }}"
+type = "JKS"
+password = "{% if secure_vault_enabled|bool %}$secret{trust_store_password}{% else %}{{ trust_store_password }}{% endif %}"
+
+[[event_handler]]
+name="userPostSelfRegistration"
+subscriptions=["POST_ADD_USER"]
+
+[apim.throttling]
+service_url = "{{ traffic_manager_node }}:{{ 9443 + tm_offset }}/services/"
+username = "$ref{super_admin.username}"
+password = "$ref{super_admin.password}"
+enable_unlimited_tier = true
+enable_header_based_throttling = false
+enable_jwt_claim_based_throttling = false
+enable_query_param_based_throttling = false
+
+{% if keymanager_https_proxy_port is defined %}
+[transport.https.properties]
+proxyPort = {{ keymanager_https_proxy_port }}
+{% endif %}
+
+{% if secure_vault_enabled|bool %}
+[secrets]
+admin_password = "[{{ admin_password }}]"
+wso2am_db_username = "[{{ wso2am_db_username }}]"
+wso2am_db_password = "[{{ wso2am_db_password }}]"
+wso2shared_db_username = "[{{ wso2shared_db_username }}]"
+wso2shared_db_password = "[{{ wso2shared_db_password }}]"
+primary_key_store_password = "[{{ primary_key_store_password }}]"
+primary_key_store_key_password = "[{{ primary_key_store_key_password }}]"
+trust_store_password = "[{{ trust_store_password }}]"
+internal_key_store_key_password = "[{{ internal_key_store_key_password }}]"
+internal_key_store_password = "[{{ internal_key_store_password }}]"
+tls_key_store_key_password = "[{{ tls_key_store_key_password }}]"
+tls_key_store_password = "[{{ tls_key_store_password }}]"
+{% endif %}
+
+[oauth.grant_type.token_exchange]
+enable = false
+allow_refresh_tokens = true
+iat_validity_period = "1h"
+
+[carbon_health_check]
+enable = true
+
+[carbon_health_check.health_checker.data_source_health_checker]
+enable = true
+pool_usage_limit_percentage = "80"
+order = "97"
+
+[carbon_health_check.health_checker.data_source_health_checker.properties]
+'monitored.datasources' = "jdbc/WSO2CarbonDB,jdbc/WSO2AM_DB,jdbc/SHARED_DB,jdbc/WSO2MetricsDB,jdbc/WSO2AM_STATS_DB"
+
+[[resource.access_control]]
+context="(.*)/((\\.+)|(.*;+.*)|%2e)/(.*)"
+secure=true
+http_method="all"
